@@ -1,0 +1,120 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Authentication Flow Overview
+
+This document outlines how authentication is wired up in the project using Better Auth, JWT, and Zero Sync. It captures both server and client concerns, plus automatic routes and key integration points.
+
+## 1. Better Auth Server Setup (src/lib/auth.ts)
+
+- Uses `betterAuth({ ... })` to bootstrap auth under `basePath: '/api/auth'` via the Drizzle adapter:
+  ```ts
+  export const auth = betterAuth({
+    secret: process.env.BETTER_AUTH_SECRET,
+    basePath: '/api/auth',
+    database: drizzleAdapter(authDb, { schema: authSchema, provider: 'pg' }),
+    plugins: [ jwt({ jwt: { expirationTime: '1w' } }) ],
+    emailAndPassword: { enabled: true, minPasswordLength: 2, autoSignIn: true },
+    socialProviders: { google: { clientId, clientSecret } },
+    user: {
+      deleteUser: {
+        enabled: true,
+        beforeDelete: async (user) => {
+          // Delete user data from Zero before removing auth record
+          await deleteUserFromZero(user.id)
+        },
+      },
+    }
+  })
+  ```
+
+- **Automatic Routes:** Better Auth generates these endpoints under `/api/auth`:
+  - `/sign-up`, `/sign-in`, `/sign-out`, `/callback` (social)
+  - `/token` (JWT retrieval) & `/jwks` (public keyset)
+
+## 2. JWT & JWKS Integration
+
+- Configured via the `jwt()` plugin. Exposes:
+  - **/api/auth/token** → returns `{ token: 'ey...' }` plus `set-auth-jwt` header.
+  - **/api/auth/jwks** → publishes JSON Web Key Set for token verification.
+
+- Tokens are signed using EdDSA (Ed25519) by default; can be customized.
+- JWT management utilities in `jwt.ts` handle storage, retrieval, and decoding:
+  ```ts
+  storeJwt(jwt)      // Store JWT in localStorage with expiration
+  getCachedJwt()     // Get JWT from localStorage
+  clearJwt()         // Clear JWT from storage and cookies
+  decodeAuthJwt(jwt) // Decode JWT into AuthData type
+  ```
+
+## 3. Client-Side Auth (src/lib/auth-client.ts)
+
+- Uses `createAuthClient()` from `better-auth/react`:
+  ```ts
+  export const authClient = createAuthClient({ /* optional plugins */ })
+  export const { signIn, signUp, signOut, getSession, useSession } = authClient
+  ```
+- `useSession()` hook keeps UI in sync with session state.
+
+## 4. Zero Integration & User Sync
+
+### 4.1 State Management (src/lib/zero-setup.ts)
+- Uses Atom-based state management for auth and Zero instance:
+  ```ts
+  const zeroAtom = new Atom<Zero<ZeroSchema, Mutators>>()
+  const authAtom = new Atom<LoginState>()
+  ```
+- Zero instance is recreated whenever auth changes via `authAtom.onChange`
+- Preloads critical data with `CACHE_FOREVER` policy
+
+### 4.2 Client-Side User Sync (src/routes/_authed/app/route.tsx)
+- Syncs user data to Zero when auth changes:
+  ```ts
+  useEffect(() => {
+    if (!zero || !auth) return
+    zero.mutate.users.upsert({
+      id: auth.decoded.sub,
+      email: auth.decoded.email ?? '',
+      name: auth.decoded.name ?? ''
+    })
+  }, [zero, auth])
+  ```
+
+### 4.3 User Deletion (src/lib/delete-user-from-zero.ts)
+- Handles cleanup of user data in Zero when account is deleted:
+  ```ts
+  export async function deleteUserFromZero(userId: string) {
+    await sql.begin(tx => 
+      tx`DELETE FROM public.users WHERE id = ${userId}`
+    )
+  }
+  ```
+
+## 5. Protecting Routes (src/routes/_authed.tsx)
+
+- Uses TanStack Router's `beforeLoad` hook to enforce authentication:
+  ```ts
+  export const Route = createFileRoute('/_authed')({
+    loader: async ({ location }) => {
+      const { session } = await fetchAuthSession()
+      if (!session) {
+        throw redirect({ to: '/auth/login', search: { redirect: location.href } })
+      }
+      return { session }
+    }
+  })
+  ```
+- Any route nested under `/_authed` requires a valid session
+- `AuthWrapper` component manages JWT state and Zero initialization
+
+## References
+
+- Better Auth Basic Usage[^1]
+- Better Auth JWT Plugin[^2]
+- Zero Sync Auth Integration[^3]
+
+[^1]: https://www.better-auth.com/docs/basic-usage  
+[^2]: https://www.better-auth.com/docs/plugins/jwt  
+[^3]: https://zero.rocicorp.dev/docs/auth

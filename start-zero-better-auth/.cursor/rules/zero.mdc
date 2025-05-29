@@ -1,0 +1,274 @@
+---
+description: Any database mutation, writes, or edits follow these patterns for zero sync
+globs: 
+alwaysApply: false
+---
+# Instructions for Using Zero Custom Mutators
+
+## Overview
+
+Zero Custom Mutators provide a powerful mechanism for defining data write operations beyond simple CRUD. They allow you to embed arbitrary code within your write logic, running both client-side for optimistic updates and server-side for authority and complex operations.
+
+**Key Concepts:**
+
+- **Arbitrary Code:** Mutators are functions, enabling complex validation, permissions, calling external services (like LLMs or sending emails), calling queue, etc.
+- **Client-Side Execution:** Mutators run immediately on the client for instant UI feedback.
+- **Server-Side Execution:** Mutators are synced and executed on a server endpoint you control, providing authority.
+- **Server Authority:** The server's execution result is definitive. Client-side changes are speculative and reconciled with the server's outcome.
+- **Sync Integration:** Custom mutators fully integrate with Zero's sync engine.
+
+## Architecture
+
+1.  **Client:** Runs the client-side implementation of the mutator instantly. Uses `@rocicorp/zero`.
+2.  **Server:** Our TanStack Start backend executes the server-side implementation of the mutator.
+3.  **`zero-cache`:** Orchestrates sync, calls the push endpoint, replicates data changes, and sends updates to clients.
+
+## Implementing Mutators
+
+Each custom mutator requires **two implementations**:
+
+1.  **Client Implementation:**
+
+    - Written in TypeScript and defined in `src/mutators/shared.ts`
+    - Receives a `Transaction` object (`tx`).
+    - Uses ZQL via `tx.query` for reads.
+    - Uses the CRUD-style API via `tx.mutate` for writes.
+    - Runs speculatively for immediate feedback.
+
+    ```typescript
+    // Example Client Mutator
+    async function updateIssue(tx: Transaction, { id, title }: { id: string; title: string }) {
+      // Authentication logic
+      assertIsPartner(authData);
+
+      // Read existing data for validation
+      const prev = await tx.query.issue.where("id", id).one().run();
+
+      // Client-side validation
+      if (!prev.isLegacy && title.length > 100) {
+        throw new Error(`Title is too long`);
+      }
+
+      // Perform write operation
+      await tx.mutate.issue.update({ id, title });
+    }
+    ```
+
+2.  **Server Implementation:**
+
+    - Runs within your push endpoint against your actual database.
+    - Zero provides a `ServerTransaction` interface and helpers (`PushProcessor`, `connectionProvider`) to simplify implementation and potentially reuse client mutator code.
+    - The server's result is authoritative. If it throws an error or modifies data differently, the client will eventually reflect the server's state.
+    - Defined in `src/mutators/server.ts`
+
+    ```typescript
+    // Example Server Mutator (TypeScript using ServerTransaction, reusing client logic)
+    async function updateIssueOnServer(tx: ServerTransaction, args: { id: string; title: string }) {
+      // Optional: Add server-only logic (e.g., complex validation). Slow operations should be executed outside the transaction using `postCommitTasks` (See "Advanced Server Techniques" section)
+      const isSpam = await checkTitle(args.title);
+      if (isSpam) {
+        throw new Error("Title appears to be spam.");
+      }
+
+      // Delegate core logic to the shared client mutator function
+      // ServerTransaction implements the same interface but executes against Postgres (or other configured DB)
+      await mutators.issue.update(tx, args); // Assuming this is the client mutator function
+    }
+    ```
+
+## Using Custom Mutators on the Client
+
+1.  **Define Client Mutators:**
+
+    - Conventionally defined in `src/mutators/shared.ts`. `createMutators` can be extended to support additional mutators. This pattern facilitates passing authentication data for permissions.
+
+    ```typescript
+    // src/mutators/shared.ts
+    import { CustomMutatorDefs } from "@rocicorp/zero";
+    import { schema } from "@/db/schema.zero";
+    import { AuthData } from "@/db/schema.zero";
+
+    // Accept auth data for permissions
+    export function createMutators(authData: Omit<AuthData, "partnerAbility">) {
+      return {
+        issue: {
+          async update(tx, { id, title }: { id: string; title: string }) {
+            assertIsPartner(authData);
+
+            if (title.length > 100) {
+              throw new Error(`Title is too long`);
+            }
+
+            await tx.mutate.issue.update({ id, title });
+          },
+          // Add other mutators like create, delete, custom actions...
+          // e.g., async launchMissiles(tx, args) => { ... permission check ... }
+        },
+        // other namespaces...
+      } as const satisfies CustomMutatorDefs<typeof schema>;
+    }
+    ```
+
+2.  **Write Data on the Client:**
+
+    - Inside a client mutator function, use the `tx.mutate` API. It provides `insert`, `update`, `upsert`, and `delete` methods for each table defined in your schema.
+
+    ```typescript
+    async function myMutator(tx: Transaction) {
+      // Insert
+      await tx.mutate.issue.insert({ id: "new-id", title: "New Issue" /* ... */ });
+      // Update
+      await tx.mutate.issue.update({ id: "existing-id", title: "Updated Title" });
+      // Upsert (Insert or Update)
+      await tx.mutate.issue.upsert({ id: "maybe-id", title: "Upserted Title" /* ... */ });
+      // Delete
+      await tx.mutate.issue.delete({ id: "to-delete-id" });
+    }
+    ```
+
+3.  **Read Data on the Client:**
+
+    - Inside a client mutator function, use the `tx.query` API with ZQL to read data transactionally.
+
+    ```typescript
+    async function checkAndUpdate(tx, { id, title }: { id: string; title: string }) {
+      const existing = await tx.query.issue.where("id", id).one().run();
+      if (!existing) {
+        throw new Error("Issue not found");
+      }
+      // Use 'existing' data in logic...
+      await tx.mutate.issue.update({ id, title });
+    }
+    ```
+
+4.  **Invoke Client Mutators:**
+
+    - Call mutators from your application code using the `zero.mutate` object.
+    - The call returns immediately after the client-side execution finishes.
+    - You can optionally `await` the `.server` property on the return value to wait for server confirmation (or error).
+
+    ```typescript
+    // Fire-and-forget (updates UI instantly)
+    zero.mutate.issue.update({ id: "issue-123", title: "New title" });
+
+    // Invoke and wait for server result
+    async function updateIssueAndWait(id: string, title: string) {
+      try {
+        const result = zero.mutate.issue.update({ id, title });
+        // UI has already updated optimistically here
+
+        const serverResult = await result.server; // Wait for server confirmation
+
+        if (serverResult.error) {
+          console.error("Server rejected the mutation:", serverResult.error);
+          // Here, Zero will automatically roll back the optimistic client change
+        } else {
+          console.log("Server successfully applied the mutation.");
+        }
+      } catch (clientError) {
+        // Catch errors thrown by the *client-side* mutator execution
+        console.error("Client-side mutation failed:", clientError);
+      }
+    }
+    ```
+
+## Advanced Server Techniques
+
+- **Server-Specific Code:**
+
+  - **Wrapping:** `src/mutators/server.ts` imports client mutators and wraps them, adding server-only logic (like audit logs, external API calls _after_ transaction). If no specific server logic is required, client mutators can be used directly.
+  - **Conditional Logic:** Use `tx.location === 'server'` inside a shared mutator function (less common - prefer separating client and server logic).
+
+  ```typescript
+  import { CustomMutatorDefs } from "@rocicorp/zero";
+  import { schema } from "@/db/schema.zero";
+
+  export function createServerMutators(
+    authData: AuthData,
+    postCommitTasks: PostCommitTask[]
+  ) {
+    const mutators = createMutators(authData);
+
+    return {
+      ...mutators, // Keep most client mutators
+      // Override client mutators with server-only logic where needed
+      issue: {
+        ...clientMutators.issue, // Keep most issue mutators
+        update: async (tx, args: { id: string; title: string }) => {
+          // Call shared client logic first
+          await mutators.issue.update(tx, args);
+
+          // Server-only logic: Add audit log (within the same transaction)
+          await tx.mutate.auditLog.insert({
+            /* ... audit data ... */
+          });
+        },
+      },
+    } as const satisfies CustomMutatorDefs<typeof schema>;
+  }
+  ```
+
+- **Permissions:**
+
+  - Implement checks within your mutator functions using the `authData` passed into `createMutators`.
+  - Query the database using `tx.query` (ZQL) or raw SQL (`tx.dbTransaction`) to verify user permissions.
+  - Where possible, define permissions as reusable functions.
+  - Throw an error if the user is not authorized.
+  - Permissions are defined in `src/db/schema.zero.ts` using `definePermissions`.
+
+  ```typescript
+  // Inside src/db/schema.zero.ts
+  import { AuthData } from "@/db/schema.zero";
+
+  export async function assertIsPartnerRow(
+    authData: AuthData,
+    query: Query<typeof schema, "collaborations">,
+    id: string
+  ) {
+    const partnerId = invariant(
+      await query.where("id", id).one().run(),
+      `entity ${id} does not exist`
+    ).partnerId;
+
+    invariant(authData.sub === partnerId, "User does not have permission to view this issue");
+  }
+
+  // Inside a mutator in src/mutators/server.ts
+  updateCollaboration: async (
+    tx: Transaction,
+    change: UpdateValue<typeof schema.tables.collaborations>
+  ) => {
+    await assertIsPartnerRow(authData, zero.query.collaborations, change.id);
+    await tx.mutate.collaborations.update(change);
+  };
+  ```
+
+- **Notifications & Async Work:**
+
+  - **Avoid** performing slow, external network calls (email, Slack, etc.) _inside_ the database transaction of the mutator.
+  - **Pattern:** Collect async tasks during mutator execution. Execute them _after_ `processor.process` successfully completes and the transaction is committed.
+
+  ```typescript
+  export type PostCommitTask = () => Promise<void>;
+
+  export function createServerMutators(
+    authData: AuthData,
+    postCommitTasks: PostCommitTask[]
+  ) {
+    const mutators = createMutators(authData);
+
+    return {
+      ...mutators,
+      issue: {
+        update: async (tx, args) => {
+          await tx.mutate.issue.update(args);
+
+          // Add async task to the list *without* awaiting it here
+          postCommitTasks.push(async () => {
+            await sendEmailToSubscribers(args.id);
+          });
+        },
+      },
+    };
+  }
+  ```

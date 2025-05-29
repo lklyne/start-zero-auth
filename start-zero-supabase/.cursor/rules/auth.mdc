@@ -1,0 +1,172 @@
+---
+description: supabase auth login logout account session
+globs: 
+alwaysApply: false
+---
+# Authentication Flow Overview
+
+This document outlines how authentication is implemented in the project using Supabase Auth and Zero Sync. It covers both server and client-side concerns, plus routing integration and data synchronization.
+
+## 1. Supabase Auth Setup
+
+- Uses the Supabase platform for authentication with email/password and social providers
+- Requires environment variables:
+  ```
+  VITE_SUPABASE_URL=your-project-url
+  VITE_SUPABASE_ANON_KEY=your-anon-key
+  ```
+
+## 2. Supabase Client Integration
+
+### 2.1 Server-Side Client (src/lib/supabase.ts)
+```ts
+import { createServerClient } from '@supabase/ssr'
+import { parseCookies, setCookie } from '@tanstack/react-start/server'
+
+export function getSupabaseServerClient() {
+  const url = import.meta.env.VITE_SUPABASE_URL
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY
+  
+  return createServerClient(url, anon, {
+    cookies: {
+      get(name: string) {
+        const cookies = parseCookies()
+        return cookies[name]
+      },
+      set(name: string, value: string, options) {
+        setCookie(name, value, options)
+      },
+      remove(name: string, options) {
+        setCookie(name, '', { ...options, maxAge: -1 })
+      }
+    }
+  })
+}
+```
+
+### 2.2 Browser Client (src/lib/supabase-client.ts)
+```ts
+import { createBrowserClient } from '@supabase/ssr'
+
+export function getSupabaseBrowserClient() {
+  const url = import.meta.env.VITE_SUPABASE_URL
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY
+  
+  return createBrowserClient(url, anon)
+}
+```
+
+## 3. Authentication Components
+
+### 3.1 Login Form (src/components/supabase-login.tsx)
+- Uses React Hook Form with Zod validation
+- Handles email/password authentication via Supabase
+- Navigates to the app after successful login
+
+### 3.2 Signup Form (src/components/supabase-signup.tsx)
+- Similarly uses React Hook Form with Zod validation
+- Creates a new user in Supabase Auth
+- Stores additional user metadata (name) during registration
+
+## 4. Route Protection
+
+### 4.1 Root Route Authentication (src/routes/__root.tsx)
+- Uses TanStack Router's `beforeLoad` to fetch the current user on all routes:
+```ts
+beforeLoad: async () => {
+  const user = await fetchUser()
+  return { user }
+}
+```
+
+### 4.2 Protected Routes (src/routes/_authed.tsx)
+- All routes under `/_authed` require authentication:
+```ts
+export const Route = createFileRoute('/_authed')({
+  loader: async ({ location, context }) => {
+    // Use existing root context if available during client navigation
+    if (context?.user) return { user: context.user }
+    
+    // No user in context, redirect to login immediately
+    throw redirect({ to: '/auth/login', search: { redirect: location.href } })
+  },
+  component: AuthWrapper
+})
+```
+
+## 5. Zero Sync Integration
+
+### 5.1 Zero Initialization (src/lib/zero-setup.ts)
+- Uses an Atom for state management of the Zero instance:
+```ts
+const zeroAtom = new Atom<Zero<ZeroSchema, Mutators>>()
+
+export function initializeZero(user: User) {
+  const authData: AuthData = {
+    sub: user.id,
+    email: user.email,
+    name: user.name,
+  }
+
+  const zero = new Zero<ZeroSchema, Mutators>({
+    schema,
+    server: serverURL,
+    logLevel: 'error',
+    userID: user.id,
+    mutators: createMutators(authData),
+    auth: () => user.accessToken,
+  })
+
+  zeroAtom.value = zero
+  preload(zero)
+}
+```
+
+### 5.2 User Data Synchronization (in components/routes)
+- Syncs Supabase user data to Zero when authentication changes:
+```ts
+// When user is loaded
+useEffect(() => {
+  if (!zero || !user) return
+  
+  zero.mutate.users.upsert({
+    id: user.id,
+    email: user.email,
+    name: user.name
+  })
+}, [zero, user])
+```
+
+## 6. User Deletion Flow
+
+- Account deletion handled by server function in `src/components/account-delete.tsx`:
+```ts
+export const deleteUserFn = createServerFn({ method: 'POST' }).handler(
+  async () => {
+    // Get the authenticated user
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    // Delete user data from Zero database
+    await sql.begin(async (tx) => {
+      await tx`DELETE FROM public.users WHERE id = ${user.id}`
+    })
+    
+    // Delete user from Supabase Auth
+    await supabase.auth.admin.deleteUser(user.id)
+    
+    return { error: false }
+  }
+)
+```
+
+## 7. Auth Hooks and Utilities
+
+- TanStack Server Functions handle authentication operations
+- Account components interact with Supabase Auth directly
+- Zero permissions are enforced based on the user ID from Supabase
+
+## References
+
+- [Supabase Auth Documentation](https://supabase.com/docs/guides/auth)
+- [TanStack Router Authentication](https://tanstack.com/router/latest/docs/framework/react/examples/auth-with-tanstack-auth)
+- [Zero Sync Auth Integration](https://zero.rocicorp.dev/docs/auth)

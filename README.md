@@ -6,28 +6,27 @@ TanStack React Start starter templates with different authentication implementat
 
 Choose your preferred authentication approach:
 
-### BetterAuth Implementation
+### Better Auth Template
 
 ```bash
 cd start-zero-better-auth
 bun install
-bun run dev
+bun db:up          # Start PostgreSQL
+bun db:push        # Push schema
+bun db:auth:push   # Push auth schema
+bun zero-cache     # Start Zero Cache
+bun dev            # Start dev server
 ```
 
-### Supabase Implementation
+### Supabase Auth Template
 
 ```bash
 cd start-zero-supabase
 bun install
-bun run dev
-```
-
-## Project Structure
-
-```
-start-zero-auth/
-├── start-zero-better-auth/     # BetterAuth + Docker implementation
-└── start-zero-supabase/        # Supabase implementation
+bun db:up          # Start PostgreSQL
+bun db:push        # Push schema
+bun zero-cache     # Start Zero Cache
+bun dev            # Start dev server
 ```
 
 ## Authentication Implementations
@@ -84,7 +83,8 @@ Both implementations share the same core stack:
 ## Credits
 
 - Original project forked from [Austinm911 - TanStack Zero](https://github.com/austinm911/tanstack-zero)
-- Enhanced with authentication implementations
+- Added authentication implementations with BetterAuth and Supabase
+- Added Zero custom mutators
 
 ## License
 

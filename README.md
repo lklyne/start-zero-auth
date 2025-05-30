@@ -1,88 +1,91 @@
-# Start Zero Auth - Starter Templates
+# Start Zero Auth
 
-This repository contains two complete starter templates for building modern web applications with real-time data synchronization and authentication:
+TanStack React Start starter templates with different authentication implementations.
 
-## 🚀 Templates
+## Quick Start
 
-### 1. Better Auth Template (`start-zero-better-auth/`)
+Choose your preferred authentication approach:
 
-A complete starter using **Better Auth** for authentication with JWT support.
-
-**Features:**
-
-- 🔐 Better Auth with JWT tokens
-- 📧 Email/password authentication
-- 🌐 Social login (Google)
-- 🔄 Real-time data sync with Zero
-- 💾 PostgreSQL with Drizzle ORM
-- 🎨 Modern UI with Shadcn/UI
-
-### 2. Supabase Auth Template (`start-zero-supabase/`)
-
-A complete starter using **Supabase Auth** for authentication.
-
-**Features:**
-
-- 🔐 Supabase Auth
-- 📧 Email/password authentication
-- 🌐 Social login support
-- 🔄 Real-time data sync with Zero
-- 💾 PostgreSQL with Drizzle ORM
-- 🎨 Modern UI with Shadcn/UI
-
-## 🛠 Tech Stack
-
-Both templates share the same modern tech stack:
-
-- **Framework:** React 19 with TanStack React Start (SSR + file-based routing)
-- **Data Sync:** Zero Sync for real-time client/server synchronization
-- **Database:** PostgreSQL with Drizzle ORM
-- **UI:** Tailwind CSS + Shadcn/UI components
-- **Forms:** TanStack Form with Zod validation
-- **Tooling:** Bun, Biome (lint/format), Vitest
-- **Email:** React Email + Resend
-
-## 🚀 Quick Start
-
-Choose your preferred authentication method:
-
-### Better Auth Template
+### BetterAuth Implementation
 
 ```bash
 cd start-zero-better-auth
 bun install
-bun db:up          # Start PostgreSQL
-bun db:push        # Push schema
-bun db:auth:push   # Push auth schema
-bun zero-cache     # Start Zero Cache
-bun dev            # Start dev server
+bun run dev
 ```
 
-### Supabase Auth Template
+### Supabase Implementation
 
 ```bash
 cd start-zero-supabase
 bun install
-bun db:up          # Start PostgreSQL
-bun db:push        # Push schema
-bun zero-cache     # Start Zero Cache
-bun dev            # Start dev server
+bun run dev
 ```
 
-## 📚 Documentation
+## Project Structure
 
-Each template includes detailed documentation:
+```
+start-zero-auth/
+├── start-zero-better-auth/     # BetterAuth + Docker implementation
+└── start-zero-supabase/        # Supabase implementation
+```
 
-- Setup and configuration guides
-- Authentication flow explanations
-- Database schema management
-- Real-time sync patterns
-- Email template workflows
+## Authentication Implementations
 
-## 🤝 Contributing
+### start-zero-better-auth/
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+- **Framework:** TanStack React Start with Zero Sync
+- **Auth:** [BetterAuth](https://www.better-auth.com/)
+- **Database:** PostgreSQL with Docker
+- **Features:**
+  - Local database setup with Docker Compose
+  - Full control over auth implementation
+  - Drizzle ORM integration
+  - Zero Sync for real-time data
 
-## 📄 License
+### start-zero-supabase/
 
-MIT License - see individual template directories for details.
+- **Framework:** TanStack React Start with Zero Sync
+- **Auth:** [Supabase Auth](https://supabase.com/auth)
+- **Database:** Supabase PostgreSQL
+- **Features:**
+  - Hosted database and auth
+  - Built-in user management
+  - Real-time subscriptions
+  - Zero Sync integration
+
+## Tech Stack
+
+Both implementations share the same core stack:
+
+- **Framework:** React 19 with TanStack React Start (SSR + file-based routing)
+- **Data Sync:** Zero Sync with Zero Cache for real-time updates
+- **Database ORM:** Drizzle with drizzle-zero integration
+- **Routing:** TanStack Router (SPA-style client-side routing)
+- **UI:** Tailwind CSS + Shadcn UI + Radix primitives
+- **Forms:** TanStack Form with Zod validation
+- **Tooling:** Bun, Biome (lint/format), Vitest
+
+## Getting Started
+
+1. **Choose your implementation** based on your needs:
+
+   - **BetterAuth**: Full control, local development, custom auth flows
+   - **Supabase**: Hosted solution, quick setup, built-in features
+
+2. **Navigate to the chosen directory**:
+
+   ```bash
+   cd start-zero-better-auth  # or start-zero-supabase
+   ```
+
+3. **Follow the setup instructions** in that directory's README.md
+
+## Credits
+
+- Original project forked from [Austinm911 - TanStack Zero](https://github.com/austinm911/tanstack-zero)
+- Enhanced with authentication implementations
+
+## License
+
+MIT License - see individual project directories for specific details.

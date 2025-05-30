@@ -85,7 +85,3 @@ Both implementations share the same core stack:
 - Original project forked from [Austinm911 - TanStack Zero](https://github.com/austinm911/tanstack-zero)
 - Added authentication implementations with BetterAuth and Supabase
 - Added Zero custom mutators
-
-## License
-
-MIT License - see individual project directories for specific details.

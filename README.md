@@ -2,6 +2,9 @@
 
 TanStack React Start starter templates with different authentication implementations.
 
+<img width="1255" alt="image" src="https://github.com/user-attachments/assets/c3033d7c-fdc9-491f-af75-3cb8273105fa" />
+
+
 ## Quick Start
 
 Choose your preferred authentication approach:

@@ -97,7 +97,7 @@ function RouteComponent() {
 						<FileJson2 className='w-3.5 h-3.5' />
 						JSON
 					</Button>
-				</div>/
+				</div>
 			</AppNav>
 			<div className='flex flex-col grow overflow-y-auto'>
 				<div className=''>

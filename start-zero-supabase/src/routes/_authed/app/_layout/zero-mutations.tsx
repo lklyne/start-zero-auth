@@ -48,9 +48,16 @@ function PersonList({ view }: { view: 'json' | 'table' }) {
 							params={{ personId: person.id }}
 							className='flex grow items-center pl-4 py-2'
 						>
-							<span className='font-medium text-sm text-stone-700 group-hover:text-stone-950'>
-								{person.name}
-							</span>
+							<div className='flex flex-col'>
+								<span className='font-medium text-sm text-stone-700 group-hover:text-stone-950'>
+									{person.name}
+								</span>
+								{person.email && (
+									<span className='text-xs text-muted-foreground'>
+										{person.email}
+									</span>
+								)}
+							</div>
 							<div className='flex items-center gap-2 ml-auto mr-4'>
 								<span className='text-sm text-muted-foreground w-auto'>
 									{person.id}
@@ -90,6 +97,7 @@ function RouteComponent() {
 		z.mutate.persons.insert({
 			id: crypto.randomUUID(),
 			name: faker.person.fullName(),
+			email: faker.internet.email(),
 		})
 	}, [z.mutate.persons])
 

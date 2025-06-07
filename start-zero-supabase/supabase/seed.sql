@@ -12,10 +12,10 @@ INSERT INTO users (id, email, name) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Sample persons data  
-INSERT INTO persons (id, name) VALUES
-  ('person_1', 'John Doe'),
-  ('person_2', 'Jane Smith'), 
-  ('person_3', 'Mike Wilson'),
-  ('person_4', 'Sarah Davis'),
-  ('person_5', 'Tom Johnson')
+INSERT INTO persons (id, name, email) VALUES
+  ('person_1', 'John Doe', 'john.doe@example.com'),
+  ('person_2', 'Jane Smith', 'jane.smith@example.com'), 
+  ('person_3', 'Mike Wilson', 'mike.wilson@example.com'),
+  ('person_4', 'Sarah Davis', 'sarah.davis@example.com'),
+  ('person_5', 'Tom Johnson', 'tom.johnson@example.com')
 ON CONFLICT (id) DO NOTHING;

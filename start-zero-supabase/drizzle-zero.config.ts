@@ -23,6 +23,7 @@ export default drizzleZeroConfig(drizzleSchema, {
       // e.g. id: false,
       id: true,
       name: true,
+      email: true, // New column - now enabled for Zero sync
     },
   },
 
